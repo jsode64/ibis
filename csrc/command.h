@@ -1,7 +1,7 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include "def.h"
+#include <vulkan/vulkan.h>
 
 /// Renderer command buffer command types.
 typedef enum Command {

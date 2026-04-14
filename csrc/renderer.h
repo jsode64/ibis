@@ -1,12 +1,12 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include "command.h"
 #include "context.h"
 #include "def.h"
 #include "dynamic_vbo.h"
 #include "swapchain.h"
 #include "window.h"
+#include <vulkan/vulkan.h>
 
 /// Per-frame synchronization objects.
 typedef struct Frame {

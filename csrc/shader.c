@@ -1,11 +1,10 @@
 #include "shader.h"
+#include "error.h"
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
-#include "error.h"
 
-ShaderLayout create_shader_layout(const ShaderLayoutBuilder* builder,
-                                  const Renderer* renderer) {
+ShaderLayout create_shader_layout(const ShaderLayoutBuilder* builder, const Renderer* renderer) {
     (void)builder;
 
     const VkPipelineLayoutCreateInfo create_info = {
@@ -17,11 +16,11 @@ ShaderLayout create_shader_layout(const ShaderLayoutBuilder* builder,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = NULL,
     };
-    
+
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     if (query_vk_result(vkCreatePipelineLayout(renderer->context->device, &create_info, NULL,
-                                                &pipeline_layout))) {
-        return (ShaderLayout) {
+                                               &pipeline_layout))) {
+        return (ShaderLayout){
             .device = renderer->context->device,
             .pipeline_layout = pipeline_layout,
         };
@@ -35,7 +34,8 @@ void destroy_shader_layout(ShaderLayout* layout) {
     vkDestroyPipelineLayout(layout->device, layout->pipeline_layout, NULL);
 }
 
-Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout, const Renderer* renderer) {
+Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout,
+                     const Renderer* renderer) {
     VkShaderModule vertex_module = VK_NULL_HANDLE;
     VkShaderModule fragment_module = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
@@ -47,8 +47,8 @@ Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout, c
         .codeSize = builder->vertex_length,
         .pCode = builder->vertex_code,
     };
-    if (!query_vk_result(vkCreateShaderModule(renderer->context->device, &vertex_module_info,
-                                              NULL, &vertex_module))) {
+    if (!query_vk_result(vkCreateShaderModule(renderer->context->device, &vertex_module_info, NULL,
+                                              &vertex_module))) {
         goto FAIL;
     }
 

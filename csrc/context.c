@@ -285,7 +285,7 @@ InstanceInfo create_vk_instance(const ContextBuilder* builder) {
             debug_messenger_create_fn(instance, &debug_info, NULL, &debug_messenger);
         }
     }
-    return (InstanceInfo){ .instance = instance, .debug_messenger = debug_messenger };
+    return (InstanceInfo){.instance = instance, .debug_messenger = debug_messenger};
 }
 
 bool is_debugging_supported() {
@@ -468,7 +468,7 @@ i32 grade_physical_device(const VkPhysicalDevice physical_device) {
 
 VkDevice create_device(const VkPhysicalDevice physical_device,
                        const QueueFamilyIndices* queue_family_indices) {
-    cstr extensions[16] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, NULL };
+    cstr extensions[16] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, NULL};
     u32 num_extensions = 1;
 
 #if defined(__APPLE__)

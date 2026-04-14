@@ -70,7 +70,8 @@ Renderer create_renderer(const Context* context, const Window* window) {
         goto FAIL;
     }
 
-    renderer.swapchain = create_swapchain(context, renderer.render_pass, &swapchain_info, VK_NULL_HANDLE);
+    renderer.swapchain =
+        create_swapchain(context, renderer.render_pass, &swapchain_info, VK_NULL_HANDLE);
     if (renderer.swapchain.swapchain == VK_NULL_HANDLE) {
         goto FAIL;
     }
@@ -86,8 +87,8 @@ Renderer create_renderer(const Context* context, const Window* window) {
     }
 
     renderer.num_command_buffers = renderer.swapchain.num_images;
-    renderer.command_buffers =
-        create_command_buffers(context->device, renderer.command_pool, renderer.num_command_buffers);
+    renderer.command_buffers = create_command_buffers(context->device, renderer.command_pool,
+                                                      renderer.num_command_buffers);
     if (renderer.command_buffers == NULL) {
         goto FAIL;
     }
@@ -136,7 +137,9 @@ bool renderer_draw(Renderer* renderer) {
 
     // Get the next swapchain image.
     u32 image_index = 0;
-    VkResult get_image_result = vkAcquireNextImageKHR(renderer->context->device, renderer->swapchain.swapchain, 1000000000, frame->image_available, VK_NULL_HANDLE, &image_index);
+    VkResult get_image_result =
+        vkAcquireNextImageKHR(renderer->context->device, renderer->swapchain.swapchain, 1000000000,
+                              frame->image_available, VK_NULL_HANDLE, &image_index);
     bool is_swapchain_outdated = is_vk_error_outdated_swapchain(get_image_result);
     if (!is_swapchain_outdated && !query_vk_result(get_image_result)) {
         return false;
@@ -177,7 +180,8 @@ bool renderer_draw(Renderer* renderer) {
             .pImageIndices = &image_index,
             .pResults = NULL,
         };
-        const VkResult present_result = vkQueuePresentKHR(renderer->context->present_queue, &present_info);
+        const VkResult present_result =
+            vkQueuePresentKHR(renderer->context->present_queue, &present_info);
         is_swapchain_outdated = is_vk_error_outdated_swapchain(present_result);
         if (!is_swapchain_outdated && !query_vk_result(present_result)) {
             return false;
@@ -242,10 +246,11 @@ bool renderer_reload_commands(Renderer* renderer) {
             .maxDepth = 1.0f,
         };
         VkRect2D scissor = {
-            .offset = {
-                .x = 0,
-                .y = 0,
-            },
+            .offset =
+                {
+                    .x = 0,
+                    .y = 0,
+                },
             .extent = renderer->swapchain.extent,
         };
         vkCmdSetViewport(command_buffer, 0, 1, &viewport);
@@ -253,7 +258,10 @@ bool renderer_reload_commands(Renderer* renderer) {
 
         // Begin the render pass.
         VkClearValue clear_value = {
-            .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f }, },
+            .color =
+                {
+                    .float32 = {0.0f, 0.0f, 0.0f, 1.0f},
+                },
         };
         VkRenderPassBeginInfo render_pass_begin_info = {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -284,8 +292,10 @@ bool renderer_reload_commands(Renderer* renderer) {
 bool renderer_recreate_swapchain(Renderer* renderer) {
     vkDeviceWaitIdle(renderer->context->device);
 
-    SwapchainInfo swapchain_info = get_swapchain_info(renderer->context->physical_device, renderer->context->surface, renderer->context->window);
-    Swapchain new_swapchain = create_swapchain(renderer->context, renderer->render_pass, &swapchain_info, renderer->swapchain.swapchain);
+    SwapchainInfo swapchain_info = get_swapchain_info(
+        renderer->context->physical_device, renderer->context->surface, renderer->context->window);
+    Swapchain new_swapchain = create_swapchain(renderer->context, renderer->render_pass,
+                                               &swapchain_info, renderer->swapchain.swapchain);
     if (new_swapchain.swapchain == VK_NULL_HANDLE) {
         return false;
     }
