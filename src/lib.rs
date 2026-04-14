@@ -22,3 +22,4 @@ pub use vertex_data::{VertexAttribute, VertexBinding, VertexData, VertexInputRat
 pub use window::Window;
 
 pub(crate) use handle::{GlfwHandle, VkHandle};
+pub(crate) use math::{Float, Num, Signed};
