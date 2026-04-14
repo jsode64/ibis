@@ -1,4 +1,10 @@
-use std::{ffi::c_void, marker::PhantomData, ptr};
+use core::slice;
+use std::{
+    ffi::c_void,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    ptr,
+};
 
 use crate::{GpuAllocator, Result, VertexData, VkHandle, error::vk_error};
 
@@ -120,6 +126,23 @@ impl<T: VertexData> DynamicVbo<T> {
         self.raw.buffer
     }
 }
+
+impl<T: VertexData> Deref for DynamicVbo<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        let data = unsafe { slice::from_raw_parts(self.raw.data as *const T, self.raw.length) };
+        data
+    }
+}
+
+impl<T: VertexData> DerefMut for DynamicVbo<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        let data = unsafe { slice::from_raw_parts_mut(self.raw.data as *mut T, self.raw.length) };
+        data
+    }
+}
+
 impl<T: VertexData> Drop for DynamicVbo<T> {
     fn drop(&mut self) {
         unsafe {

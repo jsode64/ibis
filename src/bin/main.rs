@@ -1,5 +1,5 @@
-use std::error::Error;
 use std::mem;
+use std::{error::Error, time::Instant};
 
 use ibis::{
     Command, Context, DynamicVbo, GpuAllocator, Renderer, Shader, ShaderLayout, Vec2, Vec3,
@@ -53,7 +53,7 @@ fn main() -> Result<(), impl Error> {
     let context = Context::builder()
         .app_name(c"Hello")
         .app_version(Version::new(1, 0, 0))
-        .vk_validation(true)
+        .vk_validation(false)
         .build(&window)?;
     let mut renderer = Renderer::new(&context, &window)?;
     let gpu_allocator = GpuAllocator::new(&context);
@@ -65,24 +65,29 @@ fn main() -> Result<(), impl Error> {
         .build(&layout, &renderer)?;
 
     buffer.push(&Vertex {
-        position: Vec2::new(0.0, 0.0),
+        position: Vec2::new(-1.0, -1.0),
         color: Vec3::new(1.0, 0.0, 0.0),
     });
     buffer.push(&Vertex {
-        position: Vec2::new(1.0, 1.0),
+        position: Vec2::new(1.0, 0.0),
         color: Vec3::new(0.0, 0.0, 1.0),
     });
     buffer.push(&Vertex {
-        position: Vec2::new(1.0, 0.0),
+        position: Vec2::new(1.0, -1.0),
         color: Vec3::new(1.0, 1.0, 0.0),
     });
     renderer.set_commands(&[Command::draw_dynamic_vbo(&shader, &buffer)])?;
 
     println!("Ok");
 
+    let start = Instant::now();
     while !window.should_close() {
         window.update();
         renderer.draw()?;
+
+        let t = (Instant::now() - start).as_secs_f32();
+        buffer[1].position.x = t.cos();
+        buffer[1].position.y = t.sin();
     }
 
     Ok::<(), ibis::Error>(())
