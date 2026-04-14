@@ -9,6 +9,12 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+/// Returns whether the given `VkResult` is caused by an outdated swapchain.
+///
+/// @param result The `VkResult` to check.
+/// @return Whether the result is caused by an outdated swapchain.
+static bool is_vk_error_outdated_swapchain(VkResult result);
+
 /// Creates a render pass for the window surface format.
 ///
 /// @param device The logical device.
@@ -64,7 +70,7 @@ Renderer create_renderer(const Context* context, const Window* window) {
         goto FAIL;
     }
 
-    renderer.swapchain = create_swapchain(context, renderer.render_pass, &swapchain_info);
+    renderer.swapchain = create_swapchain(context, renderer.render_pass, &swapchain_info, VK_NULL_HANDLE);
     if (renderer.swapchain.swapchain == VK_NULL_HANDLE) {
         goto FAIL;
     }
@@ -130,9 +136,9 @@ bool renderer_draw(Renderer* renderer) {
 
     // Get the next swapchain image.
     u32 image_index = 0;
-    if (!query_vk_result(vkAcquireNextImageKHR(
-            renderer->context->device, renderer->swapchain.swapchain, 1000000000,
-            frame->image_available, VK_NULL_HANDLE, &image_index))) {
+    VkResult get_image_result = vkAcquireNextImageKHR(renderer->context->device, renderer->swapchain.swapchain, 1000000000, frame->image_available, VK_NULL_HANDLE, &image_index);
+    bool is_swapchain_outdated = is_vk_error_outdated_swapchain(get_image_result);
+    if (!is_swapchain_outdated && !query_vk_result(get_image_result)) {
         return false;
     }
 
@@ -149,9 +155,9 @@ bool renderer_draw(Renderer* renderer) {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &frame->image_available,
         .pWaitDstStageMask = &wait_stage,
-        .commandBufferCount = 1,
+        .commandBufferCount = is_swapchain_outdated ? 0 : 1,
         .pCommandBuffers = &command_buffer,
-        .signalSemaphoreCount = 1,
+        .signalSemaphoreCount = is_swapchain_outdated ? 0 : 1,
         .pSignalSemaphores = &frame->render_finished,
     };
     if (!query_vk_result(
@@ -160,18 +166,29 @@ bool renderer_draw(Renderer* renderer) {
     }
 
     // Present.
-    const VkPresentInfoKHR present_info = {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = NULL,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &frame->render_finished,
-        .swapchainCount = 1,
-        .pSwapchains = &renderer->swapchain.swapchain,
-        .pImageIndices = &image_index,
-        .pResults = NULL,
-    };
-    if (!query_vk_result(vkQueuePresentKHR(renderer->context->present_queue, &present_info))) {
-        return false;
+    if (!is_swapchain_outdated) {
+        const VkPresentInfoKHR present_info = {
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = NULL,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &frame->render_finished,
+            .swapchainCount = 1,
+            .pSwapchains = &renderer->swapchain.swapchain,
+            .pImageIndices = &image_index,
+            .pResults = NULL,
+        };
+        const VkResult present_result = vkQueuePresentKHR(renderer->context->present_queue, &present_info);
+        is_swapchain_outdated = is_vk_error_outdated_swapchain(present_result);
+        if (!is_swapchain_outdated && !query_vk_result(present_result)) {
+            return false;
+        }
+    }
+
+    // Recreate swapchain if needed.
+    if (is_swapchain_outdated) {
+        if (!renderer_recreate_swapchain(renderer)) {
+            return false;
+        }
     }
 
     return true;
@@ -262,6 +279,28 @@ bool renderer_reload_commands(Renderer* renderer) {
     }
 
     return true;
+}
+
+bool renderer_recreate_swapchain(Renderer* renderer) {
+    vkDeviceWaitIdle(renderer->context->device);
+
+    SwapchainInfo swapchain_info = get_swapchain_info(renderer->context->physical_device, renderer->context->surface, renderer->context->window);
+    Swapchain new_swapchain = create_swapchain(renderer->context, renderer->render_pass, &swapchain_info, renderer->swapchain.swapchain);
+    if (new_swapchain.swapchain == VK_NULL_HANDLE) {
+        return false;
+    }
+    destroy_swapchain(&renderer->swapchain, renderer->context->device);
+    renderer->swapchain = new_swapchain;
+
+    if (!renderer_reload_commands(renderer)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool is_vk_error_outdated_swapchain(VkResult result) {
+    return result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR;
 }
 
 VkRenderPass create_render_pass(const VkDevice device, const VkFormat format) {

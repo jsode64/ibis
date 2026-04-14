@@ -16,6 +16,9 @@ typedef struct ContextBuilder {
 
 /// A Vulkan context.
 typedef struct Context {
+    /// The target window. Must outlive the context.
+    const Window* window;
+
     VkInstance instance;
 
     VkDebugUtilsMessengerEXT debug_messenger;
@@ -40,9 +43,18 @@ typedef struct Context {
 } Context;
 
 static const Context NULL_CONTEXT = {
+    .window = NULL,
     .instance = VK_NULL_HANDLE,
+    .debug_messenger = VK_NULL_HANDLE,
+    .surface = VK_NULL_HANDLE,
     .physical_device = VK_NULL_HANDLE,
+    .compute_queue_index = 0,
+    .graphics_queue_index = 0,
+    .present_queue_index = 0,
     .device = VK_NULL_HANDLE,
+    .compute_queue = VK_NULL_HANDLE,
+    .graphics_queue = VK_NULL_HANDLE,
+    .present_queue = VK_NULL_HANDLE,
 };
 
 /// Creates and returns a context from the given builder.

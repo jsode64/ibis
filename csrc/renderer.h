@@ -94,3 +94,9 @@ u64* renderer_commands_flush(Renderer* renderer, usize n);
 /// @param renderer The renderer.
 /// @return `true` on success, `false` on failure.
 bool renderer_reload_commands(Renderer* renderer);
+
+/// Recreates the renderer's swapchain.
+///
+/// @param renderer The renderer.
+/// @result Whether the operation was successful.
+bool renderer_recreate_swapchain(Renderer* renderer);

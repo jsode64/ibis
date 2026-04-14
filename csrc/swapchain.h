@@ -66,9 +66,11 @@ SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR 
 /// @param context The source context.
 /// @param render_pass The render pass.
 /// @param swapchain_info The platform's swapchain setup information.
+/// @param previous The previous swapchain. Can be null.
 /// @return A new swapchain or a null state on failure.
 Swapchain create_swapchain(const Context* context, VkRenderPass render_pass,
-                           const SwapchainInfo* swapchain_info);
+                           const SwapchainInfo* swapchain_info,
+                        const VkSwapchainKHR previous);
 
 /// Destroys the swapchain.
 void destroy_swapchain(Swapchain* swapchain, VkDevice device);

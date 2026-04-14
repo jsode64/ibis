@@ -61,7 +61,7 @@ SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR 
 }
 
 Swapchain create_swapchain(const Context* context, VkRenderPass render_pass,
-                           const SwapchainInfo* swapchain_info) {
+                           const SwapchainInfo* swapchain_info, const VkSwapchainKHR previous) {
     Swapchain swapchain = NULL_SWAPCHAIN;
     VkImage* images = NULL;
 
@@ -95,7 +95,7 @@ Swapchain create_swapchain(const Context* context, VkRenderPass render_pass,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = swapchain_info->present_mode,
         .clipped = VK_TRUE,
-        .oldSwapchain = VK_NULL_HANDLE,
+        .oldSwapchain = previous,
     };
 
     if (!query_vk_result(

@@ -22,6 +22,9 @@ pub struct ContextBuilder {
 
 #[repr(C)]
 pub struct Context {
+    /// The target window. Must outlive the context.
+    window: *const Window,
+
     /// The Vulkan instance.
     instance: VkHandle,
 

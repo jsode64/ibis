@@ -145,6 +145,7 @@ Context create_context(const ContextBuilder* builder, const Window* window) {
 
     // Create the window surface.
     context.surface = create_surface(context.instance, window);
+    context.window = window;
     if (context.surface == VK_NULL_HANDLE) {
         goto FAIL;
     }
@@ -181,6 +182,8 @@ FAIL:
 }
 
 void destroy_context(Context* context) {
+    vkDeviceWaitIdle(context->device);
+
     if (context->device != VK_NULL_HANDLE) {
         vkDestroyDevice(context->device, NULL);
     }
@@ -198,6 +201,8 @@ void destroy_context(Context* context) {
     if (context->instance != VK_NULL_HANDLE) {
         vkDestroyInstance(context->instance, NULL);
     }
+
+    *context = NULL_CONTEXT;
 }
 
 InstanceInfo create_vk_instance(const ContextBuilder* builder) {

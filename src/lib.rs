@@ -14,7 +14,7 @@ pub use context::Context;
 pub use dynamic_vbo::DynamicVbo;
 pub use error::{Error, Result};
 pub use gpu_allocator::GpuAllocator;
-pub use math::*;
+pub use math::{Vec2, Vec3};
 pub use renderer::{Command, Renderer};
 pub use shader::{Shader, ShaderBuilder, ShaderLayout, ShaderLayoutBuilder};
 pub use version::Version;

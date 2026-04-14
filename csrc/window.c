@@ -45,7 +45,7 @@ void update_window(Window* window) {
     // Update dimensions.
     i32 width;
     i32 height;
-    glfwGetWindowSize(window->window, &width, &height);
+    glfwGetFramebufferSize(window->window, &width, &height);
     window->width = width;
     window->height = height;
 }
