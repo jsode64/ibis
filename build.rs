@@ -17,16 +17,29 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=csrc/context.h");
     println!("cargo:rerun-if-changed=csrc/def.h");
 
+    // Link GLFW.
     if cfg!(target_os = "windows") {
-        println!("cargo:rustc-link-lib=vulkan-1");
         println!("cargo:rustc-link-lib=glfw3");
     } else {
-        println!("cargo:rustc-link-lib=vulkan");
         Config::new().atleast_version("3.3").probe("glfw3").map_err(|error| {
             format!(
                 "Failed to find GLFW ({error}). Install the GLFW development package (e.g. 'libglfw3-dev' on Debian/Ubuntu or 'glfw' via Homebrew)."
             )
         })?;
+    }
+
+    // Link Vulkan.
+    if cfg!(target_os = "windows") {
+        println!("cargo:rustc-link-lib=vulkan-1");
+    } else {
+        let vulkan = Config::new()
+            .probe("vulkan")
+            .map_err(|error| format!("Failed to find Vulkan: \"{error}\"."))?;
+        if cfg!(target_os = "macos") {
+            for link_path in &vulkan.link_paths {
+                println!("cargo:rustc-link-arg=-Wl,-rpath,{}", link_path.display());
+            }
+        }
     }
 
     Ok(())

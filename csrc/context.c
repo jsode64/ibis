@@ -269,8 +269,7 @@ InstanceInfo create_vk_instance(const ContextBuilder* builder) {
     // Create instance and debug messenger (if requested).
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger = VK_NULL_HANDLE;
-    VkResult result = vkCreateInstance(&create_info, NULL, &instance);
-    if (!query_vk_result(result)) {
+    if (!query_vk_result(vkCreateInstance(&create_info, NULL, &instance))) {
         return NULL_INSTANCE_INFO;
     }
     if (do_debug_messaging) {
@@ -281,7 +280,7 @@ InstanceInfo create_vk_instance(const ContextBuilder* builder) {
             debug_messenger_create_fn(instance, &debug_info, NULL, &debug_messenger);
         }
     }
-    return (InstanceInfo){.instance = instance, .debug_messenger = debug_messenger};
+    return (InstanceInfo){ .instance = instance, .debug_messenger = debug_messenger };
 }
 
 bool is_debugging_supported() {
@@ -326,9 +325,12 @@ bool is_debugging_supported() {
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL
-debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-               VkDebugUtilsMessageTypeFlagsEXT message_type,
+debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT _message_severity,
+               VkDebugUtilsMessageTypeFlagsEXT _message_type,
                const VkDebugUtilsMessengerCallbackDataEXT* data, void* _user_data) {
+    (void)_message_severity;
+    (void)_message_type;
+    (void)_user_data;
     fprintf(stderr, "%s\n", data->pMessage);
     return VK_FALSE;
 }
@@ -451,7 +453,7 @@ i32 grade_physical_device(const VkPhysicalDevice physical_device) {
     }
 
     // Score the physical device.
-    i32 score = 0;
+    i32 score = 1;
     if (properties.deviceType & VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
         score |= 1 << 30;
     }
@@ -461,7 +463,12 @@ i32 grade_physical_device(const VkPhysicalDevice physical_device) {
 
 VkDevice create_device(const VkPhysicalDevice physical_device,
                        const QueueFamilyIndices* queue_family_indices) {
-    const cstr extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    cstr extensions[16] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, NULL };
+    u32 num_extensions = 1;
+
+#if defined(__APPLE__)
+    extensions[num_extensions++] = "VK_KHR_portability_subset";
+#endif
 
     // Create queues.
     const f32 queue_priority = 1.0;
@@ -505,7 +512,7 @@ VkDevice create_device(const VkPhysicalDevice physical_device,
         .pQueueCreateInfos = queue_create_infos,
         .enabledLayerCount = 0,
         .ppEnabledLayerNames = NULL,
-        .enabledExtensionCount = sizeof(extensions) / sizeof(extensions[0]),
+        .enabledExtensionCount = num_extensions,
         .ppEnabledExtensionNames = extensions,
         .pEnabledFeatures = NULL,
     };
