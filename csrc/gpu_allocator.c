@@ -27,7 +27,7 @@ static const BufferAllocation NULL_BUFFER_ALLOCATION = {
 /// @param properties The required memory properties.
 /// @param memory_type_index Output memory type index.
 /// @return Whether a matching memory type index was found.
-static bool find_memory_type_index(GpuAllocator* allocator, u32 filter,
+static bool find_memory_type_index(const GpuAllocator* allocator, u32 filter,
                                    VkMemoryPropertyFlags properties, u32* memory_type_index);
 
 /// Creates and allocates a Vulkan buffer.
@@ -37,7 +37,7 @@ static bool find_memory_type_index(GpuAllocator* allocator, u32 filter,
 /// @param usage_flags Vulkan usage flags for the buffer.
 /// @param memory_flags Vulkan memory property flags for the allocation.
 /// @return A buffer allocation, or `NULL_BUFFER_ALLOCATION` on failure.
-static BufferAllocation allocate_buffer(GpuAllocator* allocator, usize size,
+static BufferAllocation allocate_buffer(const GpuAllocator* allocator, usize size,
                                         VkBufferUsageFlags usage_flags,
                                         VkMemoryPropertyFlags memory_flags);
 
@@ -51,12 +51,9 @@ GpuAllocator create_gpu_allocator(const Context* context) {
     return allocator;
 }
 
-DynamicVbo allocate_dynamic_vbo(GpuAllocator* allocator, usize z, usize n) {
-    if (allocator == NULL || allocator->device == VK_NULL_HANDLE || z == 0 || n == 0) {
-        return NULL_DYNAMIC_VBO;
-    }
-
-    usize size = (z * n) + sizeof(VkDrawIndirectCommand);
+DynamicVbo* allocate_dynamic_vbo(const GpuAllocator* allocator, usize num_frames, usize z, usize n) {
+    const usize frame_size = (z * n) + sizeof(VkDrawIndirectCommand);
+    const usize size = frame_size * num_frames;
     BufferAllocation allocation = allocate_buffer(
         allocator, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -66,41 +63,21 @@ DynamicVbo allocate_dynamic_vbo(GpuAllocator* allocator, usize z, usize n) {
         goto FAIL;
     }
 
-    void* raw_data = NULL;
-    if (!query_vk_result(vkMapMemory(allocator->device, memory, 0, size, 0, &raw_data))) {
+    DynamicVbo* vbo = create_dynamic_vbo(allocator->device, buffer, memory, num_frames, z, n);
+    if (vbo == NULL) {
         goto FAIL;
     }
 
-    // Initialize the draw indirect command.
-    VkDrawIndirectCommand* cmd = (VkDrawIndirectCommand*)raw_data;
-    cmd->vertexCount = 0;
-    cmd->instanceCount = 1;
-    cmd->firstVertex = 0;
-    cmd->firstInstance = 0;
-
-    return (DynamicVbo){
-        .device = allocator->device,
-        .buffer = buffer,
-        .memory = memory,
-        .cmd = cmd,
-        .vertex_size = z,
-        .capacity = n,
-        .length = 0,
-        .data = (u8*)raw_data + sizeof(VkDrawIndirectCommand),
-    };
+    return vbo;
 
     // Failure jump; cleans and returns a null dynamic VBO.
 FAIL:
-    if (buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(allocator->device, buffer, NULL);
-    }
-    if (memory != VK_NULL_HANDLE) {
-        vkFreeMemory(allocator->device, memory, NULL);
-    }
-    return NULL_DYNAMIC_VBO;
+    vkDestroyBuffer(allocator->device, buffer, NULL);
+    vkFreeMemory(allocator->device, memory, NULL);
+    return NULL;
 }
 
-bool find_memory_type_index(GpuAllocator* allocator, u32 filter, VkMemoryPropertyFlags properties,
+bool find_memory_type_index(const GpuAllocator* allocator, u32 filter, VkMemoryPropertyFlags properties,
                             u32* memory_type_index) {
     for (u32 i = 0; i < allocator->memory_properties.memoryTypeCount; i++) {
         const bool bit_matches = (filter & (1u << i)) != 0;
@@ -115,7 +92,7 @@ bool find_memory_type_index(GpuAllocator* allocator, u32 filter, VkMemoryPropert
     return false;
 }
 
-BufferAllocation allocate_buffer(GpuAllocator* allocator, usize size,
+BufferAllocation allocate_buffer(const GpuAllocator* allocator, usize size,
                                  VkBufferUsageFlags usage_flags,
                                  VkMemoryPropertyFlags memory_flags) {
     BufferAllocation allocation = NULL_BUFFER_ALLOCATION;

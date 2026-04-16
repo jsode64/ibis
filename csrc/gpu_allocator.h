@@ -19,12 +19,11 @@ typedef struct GpuAllocator {
 /// @return A new GPU allocator.
 GpuAllocator create_gpu_allocator(const Context* context);
 
-/// Creates a new dynamic vertex buffer for the given data.
-///
-/// The returned buffer will have an indirect command at its start.
+/// Creates a new dynamic vertex buffer.
 ///
 /// @param allocator The GPU allocator.
+/// @param num_frames The number of frames in the buffer.
 /// @param z The size each vertex.
 /// @param n The capacity of the vertex buffer.
-/// @return A new dynamic vertex buffer, or `NULL_DYNAMIC_VBO` on failure.
-DynamicVbo allocate_dynamic_vbo(GpuAllocator* allocator, usize z, usize n);
+/// @return A pointer to a new dynamic vertex buffer, or a null pointer on failure.
+DynamicVbo* allocate_dynamic_vbo(const GpuAllocator* allocator, usize num_frames, usize z, usize n);

@@ -1,6 +1,9 @@
-use std::{ptr, slice};
+use std::{os::raw::c_void, ptr, slice};
 
-use crate::{Context, DynamicVbo, Result, Shader, VertexData, VkHandle, Window, error::vk_error};
+use crate::{
+    Context, DynamicVbo, DynamicVboRaw, Result, Shader, VertexData, VkHandle, Window,
+    error::vk_error,
+};
 
 unsafe extern "C" {
     /// Creates a renderer for the given context and render target.
@@ -42,7 +45,7 @@ pub enum Command {
 
     DrawDynamicVbo {
         pipeline: VkHandle,
-        buffer: VkHandle,
+        buffer: *mut DynamicVboRaw,
     },
 }
 
@@ -203,7 +206,7 @@ impl Command {
     ) -> Self {
         Self::DrawDynamicVbo {
             pipeline: shader.pipeline(),
-            buffer: dynamic_vbo.buffer(),
+            buffer: ptr::from_ref(dynamic_vbo.raw()) as *mut DynamicVboRaw,
         }
     }
 }

@@ -21,5 +21,6 @@ pub use version::Version;
 pub use vertex_data::{VertexAttribute, VertexBinding, VertexData, VertexInputRate};
 pub use window::Window;
 
+pub(crate) use dynamic_vbo::DynamicVboRaw;
 pub(crate) use handle::{GlfwHandle, VkHandle};
 pub(crate) use math::{Float, Num, Signed};

@@ -1,5 +1,6 @@
 #include "command.h"
 #include <vulkan/vulkan_core.h>
+#include "dynamic_vbo.h"
 
 bool fill_command_buffer(VkCommandBuffer command_buffer, const u64* data, const usize n) {
     usize i = 0;
@@ -13,11 +14,12 @@ bool fill_command_buffer(VkCommandBuffer command_buffer, const u64* data, const 
             i += 4;
         } else if (data[i] == CMD_DRAW_DYNAMIC_VBO) {
             const VkPipeline pipeline = (VkPipeline)data[i + 1];
-            const VkBuffer buffer = (VkBuffer)data[i + 2];
-            const VkDeviceSize offset = sizeof(VkDrawIndirectCommand);
-            vkCmdBindVertexBuffers(command_buffer, 0, 1, &buffer, &offset);
+            DynamicVbo* vbo = (DynamicVbo*)data[i + 2];
+            const VkDeviceSize command_offset = get_dynamic_vbo_offset(vbo);
+            const VkDeviceSize vertex_offset = command_offset + sizeof(VkDrawIndirectCommand);
+            vkCmdBindVertexBuffers(command_buffer, 0, 1, &vbo->buffer, &vertex_offset);
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdDrawIndirect(command_buffer, buffer, 0, 1, 0);
+            vkCmdDrawIndirect(command_buffer, vbo->buffer, command_offset, 1, 0);
             i += 3;
         } else {
             return false;

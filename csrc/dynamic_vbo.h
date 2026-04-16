@@ -1,57 +1,77 @@
 #pragma once
 
-#include "def.h"
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
+#include "def.h"
 
-/// A dynamic vertex buffer with a draw indirect command.
+/// A dynamically updated vertex buffer.
 typedef struct DynamicVbo {
     /// The source device. Must outlive the dynamic vertex buffer.
-    const VkDevice device;
+    VkDevice device;
 
+    /// The Vulkan buffer object.
     VkBuffer buffer;
 
+    /// The allocated device memory.
     VkDeviceMemory memory;
 
-    /// The draw indirect command info.
-    VkDrawIndirectCommand* cmd;
+    /// The number of frames.
+    usize num_frames;
 
-    /// The size of each vertex..
-    usize vertex_size;
+    /// The index of the next frame to write to.
+    usize frame_index;
 
-    /// The capacity of the vector.
+    /// The data capacity.
     usize capacity;
 
-    /// The current number of stored vertices.
+    /// The size of each element.
+    usize size;
+
+    /// The current length of the data.
     usize length;
 
-    /// The head of the vertex data.
-    u8* data;
+    /// A pointer to the head of the vertex data.
+    u8 data[];
 } DynamicVbo;
 
-static const DynamicVbo NULL_DYNAMIC_VBO = {
-    .device = VK_NULL_HANDLE,
-    .buffer = VK_NULL_HANDLE,
-    .memory = VK_NULL_HANDLE,
-    .cmd = NULL,
-    .vertex_size = 0,
-    .capacity = 0,
-    .length = 0,
-    .data = NULL,
-};
+/// Creates a new dynamic vertex buffer.
+///
+/// @param device The source device.
+/// @param buffer The vertex buffer.
+/// @param memory The allocated memory for the buffer.
+/// @param num_frames The number of frames in the buffer.
+/// @param size The size of each element in the vertex buffer.
+/// @param capacity The buffer's capacity.
+/// @return A pointer to a new dynamic VBO, or a null pointer on failure.
+DynamicVbo* create_dynamic_vbo(
+    const VkDevice device,
+    const VkBuffer buffer,
+    const VkDeviceMemory memory,
+    usize num_frames,
+    usize size,
+    usize capacity
+);
 
 /// Destroys the dynamic vertex buffer.
-///
-/// @param vbo The vertex buffer.
 void destroy_dynamic_vbo(DynamicVbo* vbo);
 
-/// Pushes the vertices into the buffer.
-///
-/// @param vbo The vertex buffer.
-/// @param vertices A pointer to the vertices.
-/// @param n The number of vertices in the data.
-void dynamic_vbo_push_vertices(DynamicVbo* vbo, void* vertices, usize n);
+/// Returns a pointer to the dynamic vertex buffer's vertex data.
+u8* get_dynamic_vbo_data(DynamicVbo* vbo);
 
-/// Clears the vertex buffer.
+/// Returns the offset of the dynamic vertex buffer's next frame.
+usize get_dynamic_vbo_offset(const DynamicVbo* vbo);
+
+/// Points the dynamic vertex buffer to start writing to its next frame.
+void redirect_dynamic_vbo(DynamicVbo* vbo);
+
+/// Writes the dynamic vertex buffer's data to its buffer.
+void write_dynamic_vbo(DynamicVbo* vbo);
+
+/// Clears the dynamic vertex buffer's data, removing all elements.
+void clear_dynamic_vbo(DynamicVbo* vbo);
+
+/// Writes the vertices into the vertex data.
 ///
-/// @param vbo The vertex buffer.
-void dynamic_vbo_clear(DynamicVbo* vbo);
+/// @param n The number of vertices to write.
+/// @param p A pointer to the vertices.
+void push_to_dynamic_vbo(DynamicVbo* vbo, usize n, const void* p);

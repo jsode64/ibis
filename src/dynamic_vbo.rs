@@ -6,72 +6,86 @@ use std::{
     ptr,
 };
 
-use crate::{GpuAllocator, Result, VertexData, VkHandle, error::vk_error};
+use crate::{GpuAllocator, VertexData, VkHandle};
 
 unsafe extern "C" {
     /// Creates a new dynamic vertex buffer for the given data.
     #[must_use]
-    fn allocate_dynamic_vbo(allocator: *const GpuAllocator, z: usize, n: usize) -> DynamicVboRaw;
+    fn allocate_dynamic_vbo(
+        allocator: *const GpuAllocator,
+        num_frames: usize,
+        z: usize,
+        n: usize,
+    ) -> *mut DynamicVboRaw;
 
     /// Destroys the dynamic vertex buffer.
     fn destroy_dynamic_vbo(vbo: *mut DynamicVboRaw);
 
-    /// Pushes the vertices into the buffer.
-    fn dynamic_vbo_push_vertices(vbo: *mut DynamicVboRaw, vertices: *const c_void, n: usize);
+    /// Returns a pointer to the dynamic vertex buffer's data.
+    fn get_dynamic_vbo_data(vbo: *mut DynamicVboRaw) -> *mut u8;
 
-    /// Clears the vertex buffer.
-    fn dynamic_vbo_clear(vbo: *mut DynamicVboRaw);
+    /// Writes the dynamic vertex buffer's data to its next frame.
+    fn write_dynamic_vbo(vbo: *mut DynamicVboRaw);
+
+    /// Pushes vertices into the dynamic vertex buffer's data.
+    fn push_to_dynamic_vbo(vbo: *mut DynamicVboRaw, n: usize, vertices: *const c_void);
+
+    /// Clears the dynamic vertex buffer's data.
+    fn clear_dynamic_vbo(vbo: *mut DynamicVboRaw);
 }
 
-/// A raw dynamic VBO with no vertex type.
+/// Fixed C-layout header of `DynamicVbo`.
+///
+/// The flexible array tail `data[]` is not represented as a field here.
 #[repr(C)]
-pub struct DynamicVboRaw {
+pub(crate) struct DynamicVboRaw {
     /// The source device. Must outlive the dynamic vertex buffer.
     device: VkHandle,
 
+    /// The Vulkan buffer object.
     buffer: VkHandle,
 
+    /// The device memory allocation.
     memory: VkHandle,
 
-    /// The draw indirect command info.
-    cmd: *mut c_void,
+    /// The number of frames.
+    num_frames: usize,
+
+    /// The index of the next frame to write to.
+    frame_index: usize,
+
+    /// The data capacity.
+    capacity: usize,
 
     /// The size of each vertex.
-    vertex_size: usize,
-
-    /// The capacity of the vector.
-    capacity: usize,
+    size: usize,
 
     /// The current number of stored vertices.
     length: usize,
-
-    /// The head of the vertex data.
-    data: *mut u8,
 }
 
 /// A Dynamic VBO.
 pub struct DynamicVbo<T: VertexData> {
-    raw: DynamicVboRaw,
+    raw: *mut DynamicVboRaw,
 
     _t: PhantomData<T>,
 }
 
 impl<T: VertexData> DynamicVbo<T> {
-    /// Allocates a dynamic VBO with the given capacity from the GPU allocator.
     #[inline]
     #[must_use]
-    pub fn new(allocator: &GpuAllocator, capacity: usize) -> Result<Self> {
-        let raw: DynamicVboRaw =
-            unsafe { allocate_dynamic_vbo(ptr::from_ref(allocator), size_of::<T>(), capacity) };
+    pub(crate) fn new(raw: *mut DynamicVboRaw) -> Self {
+        Self {
+            raw,
+            _t: PhantomData,
+        }
+    }
 
-        let is_initialized = !raw.device.is_null();
-
-        is_initialized
-            .then(|| Self {
-                raw,
-                _t: PhantomData,
-            })
-            .ok_or_else(|| vk_error())
+    /// Writes the dynamic vertex buffer's data to its next frame.
+    pub fn write(&mut self) {
+        unsafe {
+            write_dynamic_vbo(self.raw);
+        }
     }
 
     /// Pushes the vertex into the buffer.
@@ -79,13 +93,9 @@ impl<T: VertexData> DynamicVbo<T> {
     /// Returns whether there was room for the vertex in the buffer.
     /// If there wasn't the vertex isn't pushed.
     pub fn push(&mut self, vertex: &T) -> bool {
-        if self.raw.length < self.raw.capacity {
+        if self.raw().length < self.raw().capacity {
             unsafe {
-                dynamic_vbo_push_vertices(
-                    ptr::from_mut(&mut self.raw),
-                    ptr::from_ref(vertex) as *const c_void,
-                    1,
-                );
+                push_to_dynamic_vbo(self.raw, 1, ptr::from_ref(vertex) as *const c_void);
             }
             true
         } else {
@@ -98,14 +108,10 @@ impl<T: VertexData> DynamicVbo<T> {
     /// Returns whether there was enough room in the buffer for all vertices.
     /// If there wasn't, none get pushed.
     pub fn push_slice(&mut self, vertices: &[T]) -> bool {
-        if self.raw.length + vertices.len() <= self.raw.capacity {
+        if self.raw().length + vertices.len() <= self.raw().capacity {
             unsafe {
-                dynamic_vbo_push_vertices(
-                    ptr::from_mut(&mut self.raw),
-                    vertices.as_ptr() as *const c_void,
-                    vertices.len(),
-                );
-            };
+                push_to_dynamic_vbo(self.raw, vertices.len(), vertices.as_ptr() as *const c_void);
+            }
             true
         } else {
             false
@@ -115,15 +121,36 @@ impl<T: VertexData> DynamicVbo<T> {
     /// Clears the vertex buffer.
     pub fn clear(&mut self) {
         unsafe {
-            dynamic_vbo_clear(ptr::from_mut(&mut self.raw));
+            clear_dynamic_vbo(self.raw);
         }
     }
 
-    /// Returns the dynamic VBO's `VkBuffer` handle.
+    /// Returns a reference to the internal raw dynamic vertex buffer.
     #[inline]
     #[must_use]
-    pub(crate) fn buffer(&self) -> VkHandle {
-        self.raw.buffer
+    pub(crate) fn raw(&self) -> &DynamicVboRaw {
+        unsafe { &*self.raw }
+    }
+
+    /// Returns a mutable reference to the internal raw dynamic vertex buffer.
+    #[inline]
+    #[must_use]
+    pub(crate) fn raw_mut(&mut self) -> &mut DynamicVboRaw {
+        unsafe { &mut *self.raw }
+    }
+
+    /// Returns a pointer to the vertex data.
+    #[inline]
+    #[must_use]
+    pub(crate) fn data(&self) -> *const T {
+        unsafe { get_dynamic_vbo_data(self.raw) as *const T }
+    }
+
+    /// Returns a mutable pointer to the vertex data.
+    #[inline]
+    #[must_use]
+    pub(crate) fn data_mut(&self) -> *mut T {
+        unsafe { get_dynamic_vbo_data(self.raw) as *mut T }
     }
 }
 
@@ -131,22 +158,22 @@ impl<T: VertexData> Deref for DynamicVbo<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        let data = unsafe { slice::from_raw_parts(self.raw.data as *const T, self.raw.length) };
-        data
+        unsafe { slice::from_raw_parts(self.data(), self.raw().length) }
     }
 }
 
 impl<T: VertexData> DerefMut for DynamicVbo<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        let data = unsafe { slice::from_raw_parts_mut(self.raw.data as *mut T, self.raw.length) };
-        data
+        unsafe { slice::from_raw_parts_mut(self.data_mut(), self.raw().length) }
     }
 }
 
 impl<T: VertexData> Drop for DynamicVbo<T> {
     fn drop(&mut self) {
         unsafe {
-            destroy_dynamic_vbo(ptr::from_mut(&mut self.raw));
+            if !self.raw.is_null() {
+                destroy_dynamic_vbo(self.raw);
+            }
         }
     }
 }
