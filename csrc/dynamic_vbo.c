@@ -24,8 +24,6 @@ DynamicVbo* create_dynamic_vbo(
         .device = device,
         .buffer = buffer,
         .memory = memory,
-        .num_frames = num_frames,
-        .frame_index = 0,
         .capacity = capacity,
         .size = size,
         .length = 0,
@@ -34,6 +32,8 @@ DynamicVbo* create_dynamic_vbo(
 }
 
 void destroy_dynamic_vbo(DynamicVbo* vbo) {
+    vkDeviceWaitIdle(vbo->device);
+
     vkDestroyBuffer(vbo->device, vbo->buffer, NULL);
     vkFreeMemory(vbo->device, vbo->memory, NULL);
     free(vbo);
@@ -43,21 +43,14 @@ u8* get_dynamic_vbo_data(DynamicVbo* vbo) {
     return vbo->data;
 }
 
-usize get_dynamic_vbo_offset(const DynamicVbo* vbo) {
-    return vbo->size * vbo->capacity * vbo->frame_index;
+usize dynamic_vbo_frame_size(const DynamicVbo* vbo) {
+    return (vbo->size * vbo->capacity) + sizeof(VkDrawIndirectCommand);
 }
 
-void redirect_dynamic_vbo(DynamicVbo* vbo) {
-    vbo->frame_index = (vbo->frame_index + 1) % vbo->num_frames;
-}
-
-void write_dynamic_vbo(DynamicVbo* vbo) {
-    // Point to the next frame.
-    vbo->frame_index = (vbo->frame_index + 1) % vbo->num_frames;
-
+void dynamic_vbo_write(DynamicVbo* vbo, const usize i) {
     // Get the mapped data.
     const usize frame_size = sizeof(VkDrawIndirectCommand) + (vbo->size * vbo->capacity);
-    const usize offset = frame_size * vbo->frame_index;
+    const usize offset = frame_size * i;
     const usize vertex_bytes = vbo->size * vbo->length;
     const usize data_size = sizeof(VkDrawIndirectCommand) + vertex_bytes;
     u8* head = NULL;

@@ -49,6 +49,21 @@ typedef struct Renderer {
     Frame* frames;
 } Renderer;
 
+/// Information for a renderer's next draw.
+typedef struct RenderBeginInfo {
+    /// The index of the target frame.
+    usize frame_index;
+
+    /// The index of the target swapchain image.
+    usize image_index;
+
+    /// Whether the swapchain was out of date.
+    bool is_swapchain_outdated;
+
+    /// Whether the begin info is valid/no errors occured.
+    bool is_valid;
+} RenderBeginInfo;
+
 static const Renderer NULL_RENDERER = {
     .context = NULL,
     .render_pass = VK_NULL_HANDLE,
@@ -63,6 +78,13 @@ static const Renderer NULL_RENDERER = {
     .frames = NULL,
 };
 
+static const RenderBeginInfo NULL_RENDER_BEGIN_INFO = {
+    .frame_index = 0,
+    .image_index = 0,
+    .is_swapchain_outdated = false,
+    .is_valid = false,
+};
+
 /// Creates a renderer for the context and render target.
 ///
 /// @param context The source context. This must outlive the renderer.
@@ -75,12 +97,6 @@ Renderer create_renderer(const Context* context, const Window* window);
 /// @param renderer The renderer to destroy.
 void destroy_renderer(Renderer* renderer);
 
-/// Queues drawing and presentation for the renderer.
-///
-/// @param renderer The renderer.
-/// @return `true` on success, `false` on failure.
-bool renderer_draw(Renderer* renderer);
-
 /// Frees all previous commands and reallocates N for refilling.
 /// If N is zero, no reallocation will happen and no commands will be stored.
 ///
@@ -89,14 +105,27 @@ bool renderer_draw(Renderer* renderer);
 /// @return A pointer to the new data for filling, or a null pointer on failure.
 u64* renderer_commands_flush(Renderer* renderer, usize n);
 
-/// Reloads the command buffers.
+/// Gets information for the next render.
+///
+/// @param renderer The renderer to begin.
+/// @return Information for the next render.
+RenderBeginInfo renderer_begin(Renderer* renderer);
+
+/// Queues drawing and presentation for the renderer.
 ///
 /// @param renderer The renderer.
+/// @param begin_info The previous `begin_renderer` return value.
 /// @return `true` on success, `false` on failure.
-bool renderer_reload_commands(Renderer* renderer);
+bool renderer_draw(Renderer* renderer, const RenderBeginInfo* begin_info);
 
 /// Recreates the renderer's swapchain.
 ///
 /// @param renderer The renderer.
 /// @result Whether the operation was successful.
 bool renderer_recreate_swapchain(Renderer* renderer);
+
+/// Reloads the command buffers.
+///
+/// @param renderer The renderer.
+/// @return `true` on success, `false` on failure.
+bool renderer_reload_commands(Renderer* renderer);

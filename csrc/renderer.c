@@ -9,6 +9,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+#define TIMEOUT_NANOS 2000000000
+
 /// Returns whether the given `VkResult` is caused by an outdated swapchain.
 ///
 /// @param result The `VkResult` to check.
@@ -125,79 +127,6 @@ void destroy_renderer(Renderer* renderer) {
     *renderer = NULL_RENDERER;
 }
 
-bool renderer_draw(Renderer* renderer) {
-    // Get and wait for the next frame.
-    const usize frame_index = renderer->frame_index;
-    renderer->frame_index = (renderer->frame_index + 1) % renderer->num_frames;
-    const Frame* frame = &renderer->frames[frame_index];
-    if (!query_vk_result(vkWaitForFences(renderer->context->device, 1, &frame->in_flight, VK_TRUE,
-                                         1000000000))) {
-        return false;
-    }
-
-    // Get the next swapchain image.
-    u32 image_index = 0;
-    VkResult get_image_result =
-        vkAcquireNextImageKHR(renderer->context->device, renderer->swapchain.swapchain, 1000000000,
-                              frame->image_available, VK_NULL_HANDLE, &image_index);
-    bool is_swapchain_outdated = is_vk_error_outdated_swapchain(get_image_result);
-    if (!is_swapchain_outdated && !query_vk_result(get_image_result)) {
-        return false;
-    }
-
-    // Rest fence.
-    vkResetFences(renderer->context->device, 1, &frame->in_flight);
-
-    const VkCommandBuffer command_buffer = renderer->command_buffers[image_index];
-
-    // Submit commands.
-    const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    const VkSubmitInfo submit_info = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = NULL,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &frame->image_available,
-        .pWaitDstStageMask = &wait_stage,
-        .commandBufferCount = is_swapchain_outdated ? 0 : 1,
-        .pCommandBuffers = &command_buffer,
-        .signalSemaphoreCount = is_swapchain_outdated ? 0 : 1,
-        .pSignalSemaphores = &frame->render_finished,
-    };
-    if (!query_vk_result(
-            vkQueueSubmit(renderer->context->graphics_queue, 1, &submit_info, frame->in_flight))) {
-        return false;
-    }
-
-    // Present.
-    if (!is_swapchain_outdated) {
-        const VkPresentInfoKHR present_info = {
-            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-            .pNext = NULL,
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &frame->render_finished,
-            .swapchainCount = 1,
-            .pSwapchains = &renderer->swapchain.swapchain,
-            .pImageIndices = &image_index,
-            .pResults = NULL,
-        };
-        const VkResult present_result =
-            vkQueuePresentKHR(renderer->context->present_queue, &present_info);
-        is_swapchain_outdated = is_vk_error_outdated_swapchain(present_result);
-        if (!is_swapchain_outdated && !query_vk_result(present_result)) {
-            return false;
-        }
-    }
-
-    // Recreate swapchain if needed.
-    if (is_swapchain_outdated) {
-        if (!renderer_recreate_swapchain(renderer)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 u64* renderer_commands_flush(Renderer* renderer, const usize n) {
     if (renderer->commands != NULL) {
         free(renderer->commands);
@@ -214,6 +143,91 @@ u64* renderer_commands_flush(Renderer* renderer, const usize n) {
     renderer->commands = data;
     renderer->num_commands = n;
     return data;
+}
+
+RenderBeginInfo renderer_begin(Renderer* renderer) {
+    // Get and wait for the next frame.
+    const usize frame_index = renderer->frame_index;
+    const Frame* frame = &renderer->frames[frame_index];
+    renderer->frame_index = (renderer->frame_index + 1) % renderer->num_frames;
+    if (!query_vk_result(vkWaitForFences(renderer->context->device, 1, &frame->in_flight, VK_TRUE, 2000000000))) {
+        return NULL_RENDER_BEGIN_INFO;
+    }
+
+    // Acquire the next swapchain image index.
+    u32 image_index = 0;
+    VkAcquireNextImageInfoKHR acquire_info = {
+        .sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
+        .pNext = NULL,
+        .swapchain = renderer->swapchain.swapchain,
+        .timeout = TIMEOUT_NANOS,
+        .semaphore = frame->image_available,
+        .fence = VK_NULL_HANDLE,
+        .deviceMask = 1,
+    };
+    VkResult acquire_image_result = vkAcquireNextImage2KHR(
+        renderer->context->device,
+        &acquire_info,
+        &image_index
+    );
+
+    return (RenderBeginInfo){
+        .frame_index = frame_index,
+        .image_index = image_index,
+        .is_swapchain_outdated = is_vk_error_outdated_swapchain(acquire_image_result),
+        .is_valid = true,
+    };
+}
+
+bool renderer_draw(Renderer* renderer, const RenderBeginInfo* begin_info) {
+    // If the swapchain is outdated, recreate it and skip rendering.
+    if (begin_info->is_swapchain_outdated) {
+        return renderer_recreate_swapchain(renderer);
+    }
+
+    // Reset fence.
+    const Frame* frame = &renderer->frames[begin_info->frame_index];
+    vkResetFences(renderer->context->device, 1, &frame->in_flight);
+
+    // Submit commands.
+    const VkCommandBuffer command_buffer = renderer->command_buffers[begin_info->image_index];
+    const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    const VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = NULL,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &frame->image_available,
+        .pWaitDstStageMask = &wait_stage,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command_buffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &frame->render_finished,
+    };
+    if (!query_vk_result(
+            vkQueueSubmit(renderer->context->graphics_queue, 1, &submit_info, frame->in_flight))) {
+        return false;
+    }
+
+    // Present.
+    const u32 image_index = (u32)begin_info->image_index;
+    const VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = NULL,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &frame->render_finished,
+        .swapchainCount = 1,
+        .pSwapchains = &renderer->swapchain.swapchain,
+        .pImageIndices = &image_index,
+        .pResults = NULL,
+    };
+    const VkResult present_result = vkQueuePresentKHR(renderer->context->present_queue, &present_info);
+
+    // Recreate swapchain if outdated.
+    if (is_vk_error_outdated_swapchain(present_result)) {
+        return renderer_recreate_swapchain(renderer);
+    }
+
+    return true;
 }
 
 bool renderer_reload_commands(Renderer* renderer) {
@@ -275,7 +289,7 @@ bool renderer_reload_commands(Renderer* renderer) {
         vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
         // Add encoded commands.
-        if (!fill_command_buffer(command_buffer, renderer->commands, renderer->num_commands)) {
+        if (!fill_command_buffer(command_buffer, i, renderer->num_commands, renderer->commands)) {
             return false;
         }
 

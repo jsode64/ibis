@@ -6,26 +6,17 @@ use std::{
     ptr,
 };
 
-use crate::{GpuAllocator, VertexData, VkHandle};
+use crate::{RenderBeginInfo, VertexData, VkHandle};
 
 unsafe extern "C" {
-    /// Creates a new dynamic vertex buffer for the given data.
-    #[must_use]
-    fn allocate_dynamic_vbo(
-        allocator: *const GpuAllocator,
-        num_frames: usize,
-        z: usize,
-        n: usize,
-    ) -> *mut DynamicVboRaw;
-
     /// Destroys the dynamic vertex buffer.
     fn destroy_dynamic_vbo(vbo: *mut DynamicVboRaw);
 
     /// Returns a pointer to the dynamic vertex buffer's data.
     fn get_dynamic_vbo_data(vbo: *mut DynamicVboRaw) -> *mut u8;
 
-    /// Writes the dynamic vertex buffer's data to its next frame.
-    fn write_dynamic_vbo(vbo: *mut DynamicVboRaw);
+    /// Writes the dynamic vertex buffer's data to its frame at the given index.
+    fn dynamic_vbo_write(vbo: *mut DynamicVboRaw, i: usize);
 
     /// Pushes vertices into the dynamic vertex buffer's data.
     fn push_to_dynamic_vbo(vbo: *mut DynamicVboRaw, n: usize, vertices: *const c_void);
@@ -47,12 +38,6 @@ pub(crate) struct DynamicVboRaw {
 
     /// The device memory allocation.
     memory: VkHandle,
-
-    /// The number of frames.
-    num_frames: usize,
-
-    /// The index of the next frame to write to.
-    frame_index: usize,
 
     /// The data capacity.
     capacity: usize,
@@ -82,9 +67,9 @@ impl<T: VertexData> DynamicVbo<T> {
     }
 
     /// Writes the dynamic vertex buffer's data to its next frame.
-    pub fn write(&mut self) {
+    pub fn write(&mut self, begin_info: &RenderBeginInfo) {
         unsafe {
-            write_dynamic_vbo(self.raw);
+            dynamic_vbo_write(self.raw, begin_info.image_index());
         }
     }
 

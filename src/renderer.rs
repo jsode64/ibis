@@ -1,4 +1,4 @@
-use std::{os::raw::c_void, ptr, slice};
+use std::{ptr, slice};
 
 use crate::{
     Context, DynamicVbo, DynamicVboRaw, Result, Shader, VertexData, VkHandle, Window,
@@ -13,10 +13,13 @@ unsafe extern "C" {
     /// Destroys the renderer.
     fn destroy_renderer(renderer: *mut Renderer);
 
+    /// Gets and returns information for the renderer's next draw.
+    fn renderer_begin(renderer: *mut Renderer) -> RenderBeginInfo;
+
     /// Submits drawing and presentation for the renderer.
     ///
     /// Returns `true` on success, `false` on failure.
-    fn renderer_draw(renderer: *mut Renderer) -> bool;
+    fn renderer_draw(renderer: *mut Renderer, begin_info: *const RenderBeginInfo) -> bool;
 
     /// Replaces the renderer command stream storage and returns a writable pointer.
     #[must_use]
@@ -49,6 +52,47 @@ pub enum Command {
     },
 }
 
+/// A Vulakn swapchain setup.
+#[repr(C)]
+struct Swapchain {
+    /// The Vulkan swapchain handle.
+    _swapchain: VkHandle,
+
+    /// The number of swapchain images.
+    _num_images: u32,
+
+    /// The swapchain images.
+    _swapchain_images: *mut SwapchainImage,
+
+    /// The swapchain extent.
+    _extent: [u32; 2],
+}
+
+/// A swapchain image.
+#[repr(C)]
+struct SwapchainImage {
+    /// The image.
+    _image: VkHandle,
+
+    /// The image view.
+    _image_view: VkHandle,
+
+    /// The framebuffer.
+    _framebuffer: VkHandle,
+}
+
+/// Per-frame objects. Contains the frame's synchronization objects and command buffer.
+#[repr(C)]
+struct Frame {
+    /// The "image available" semaphore.
+    image_available: VkHandle,
+
+    /// The "render finished" semaphore.
+    render_finished: VkHandle,
+
+    /// The "in flight" fence.
+    in_flight: VkHandle,
+}
 /// A Vulkan renderer.
 #[repr(C)]
 pub struct Renderer {
@@ -86,46 +130,20 @@ pub struct Renderer {
     frames: *mut Frame,
 }
 
-/// A Vulakn swapchain setup.
+/// Information for a renderer's next draw.
 #[repr(C)]
-struct Swapchain {
-    /// The Vulkan swapchain handle.
-    _swapchain: VkHandle,
+pub struct RenderBeginInfo {
+    /// The index of the target frame.
+    frame_index: usize,
 
-    /// The number of swapchain images.
-    _num_images: u32,
+    /// The index of the target swapchain image.
+    image_index: usize,
 
-    /// The swapchain images.
-    _swapchain_images: *mut SwapchainImage,
+    /// Whether the swapchain was out of date.
+    is_swapchain_outdated: bool,
 
-    /// The swapchain extent.
-    _extent: [u32; 2],
-}
-
-/// A swapchain image
-#[repr(C)]
-struct SwapchainImage {
-    /// The image.
-    _image: VkHandle,
-
-    /// The image view.
-    _image_view: VkHandle,
-
-    /// The framebuffer.
-    _framebuffer: VkHandle,
-}
-
-/// Per-frame objects. Contains the frame's synchronization objects and command buffer.
-#[repr(C)]
-struct Frame {
-    /// The "image available" semaphore.
-    image_available: VkHandle,
-
-    /// The "render finished" semaphore.
-    render_finished: VkHandle,
-
-    /// The "in flight" fence.
-    in_flight: VkHandle,
+    /// Whether the begin info is valid/no errors occured.
+    is_valid: bool,
 }
 
 impl Renderer {
@@ -139,11 +157,23 @@ impl Renderer {
         is_initialized.then_some(renderer).ok_or_else(|| vk_error())
     }
 
-    /// Submits rendering and presentation for the renderer.
+    /// Returns information for the next draw.
     #[inline]
     #[must_use]
-    pub fn draw(&mut self) -> Result<()> {
-        let success = unsafe { renderer_draw(ptr::from_mut(self)) };
+    pub fn begin(&mut self) -> Result<RenderBeginInfo> {
+        let begin_info = unsafe { renderer_begin(ptr::from_mut(self)) };
+
+        begin_info
+            .is_valid
+            .then_some(begin_info)
+            .ok_or_else(|| vk_error())
+    }
+
+    /// Draws and presents the next render.
+    #[inline]
+    #[must_use]
+    pub fn draw(&mut self, begin_info: &RenderBeginInfo) -> Result<()> {
+        let success = unsafe { renderer_draw(ptr::from_mut(self), ptr::from_ref(begin_info)) };
 
         success.then_some(()).ok_or_else(|| vk_error())
     }
@@ -182,6 +212,22 @@ impl Renderer {
 
         let success = unsafe { renderer_reload_commands(ptr::from_mut(self)) };
         success.then_some(()).ok_or_else(|| vk_error())
+    }
+}
+
+impl RenderBeginInfo {
+    /// Returns the index of the next target frame.
+    #[inline]
+    #[must_use]
+    pub(crate) fn frame_index(&self) -> usize {
+        self.frame_index
+    }
+
+    /// Returns the index of the next target swapchain image.
+    #[inline]
+    #[must_use]
+    pub(crate) fn image_index(&self) -> usize {
+        self.image_index
     }
 }
 

@@ -15,12 +15,6 @@ typedef struct DynamicVbo {
     /// The allocated device memory.
     VkDeviceMemory memory;
 
-    /// The number of frames.
-    usize num_frames;
-
-    /// The index of the next frame to write to.
-    usize frame_index;
-
     /// The data capacity.
     usize capacity;
 
@@ -58,14 +52,11 @@ void destroy_dynamic_vbo(DynamicVbo* vbo);
 /// Returns a pointer to the dynamic vertex buffer's vertex data.
 u8* get_dynamic_vbo_data(DynamicVbo* vbo);
 
-/// Returns the offset of the dynamic vertex buffer's next frame.
-usize get_dynamic_vbo_offset(const DynamicVbo* vbo);
+/// Returns the size of one of the dynamic vertex buffer's frames.
+usize dynamic_vbo_frame_size(const DynamicVbo* vbo);
 
-/// Points the dynamic vertex buffer to start writing to its next frame.
-void redirect_dynamic_vbo(DynamicVbo* vbo);
-
-/// Writes the dynamic vertex buffer's data to its buffer.
-void write_dynamic_vbo(DynamicVbo* vbo);
+/// Writes the dynamic vertex buffer's data its frame at the given index.
+void dynamic_vbo_write(DynamicVbo* vbo, usize i);
 
 /// Clears the dynamic vertex buffer's data, removing all elements.
 void clear_dynamic_vbo(DynamicVbo* vbo);
