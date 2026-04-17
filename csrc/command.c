@@ -22,9 +22,9 @@ bool fill_command_buffer(
             DynamicVbo* vbo = (DynamicVbo*)next[2];
             const VkDeviceSize command_offset = dynamic_vbo_frame_size(vbo) * i;
             const VkDeviceSize vertex_offset = command_offset + sizeof(VkDrawIndirectCommand);
-            vkCmdBindVertexBuffers(command_buffer, 0, 1, &vbo->buffer, &vertex_offset);
+            vkCmdBindVertexBuffers(command_buffer, 0, 1, &vbo->buffer.buffer, &vertex_offset);
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdDrawIndirect(command_buffer, vbo->buffer, command_offset, 1, 0);
+            vkCmdDrawIndirect(command_buffer, vbo->buffer.buffer, command_offset, 1, 0);
             next += 3;
         } else {
             return false;

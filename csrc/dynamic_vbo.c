@@ -3,82 +3,71 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 #include "error.h"
+#include "util.h"
 
-DynamicVbo* create_dynamic_vbo(
-    const VkDevice device,
-    const VkBuffer buffer,
-    const VkDeviceMemory memory,
-    const usize num_frames,
-    const usize size,
-    const usize capacity
-) {
-    const usize data_size = size * capacity;
+DynamicVbo* create_dynamic_vbo(Buffer* buffer, const usize z, const usize c) {
+    const usize data_size = z * c;
     DynamicVbo* vbo = malloc(sizeof(DynamicVbo) + data_size);
     if (vbo == NULL) {
         return NULL;
     }
 
     *vbo = (DynamicVbo){
-        .device = device,
-        .buffer = buffer,
-        .memory = memory,
-        .capacity = capacity,
-        .size = size,
-        .length = 0,
+        .buffer = *buffer,
+        .c = c,
+        .z = z,
+        .n = 0,
     };
     return vbo;
 }
 
 void destroy_dynamic_vbo(DynamicVbo* vbo) {
-    vkDeviceWaitIdle(vbo->device);
+    vkDeviceWaitIdle(vbo->buffer.device);
 
-    vkDestroyBuffer(vbo->device, vbo->buffer, NULL);
-    vkFreeMemory(vbo->device, vbo->memory, NULL);
+    vkDestroyBuffer(vbo->buffer.device, vbo->buffer.buffer, NULL);
+    vkFreeMemory(vbo->buffer.device, vbo->buffer.memory, NULL);
     free(vbo);
 }
 
-u8* get_dynamic_vbo_data(DynamicVbo* vbo) {
+u8* dynamic_vbo_get_data(DynamicVbo* vbo) {
     return vbo->data;
 }
 
 usize dynamic_vbo_frame_size(const DynamicVbo* vbo) {
-    return (vbo->size * vbo->capacity) + sizeof(VkDrawIndirectCommand);
+    return sizeof(VkDrawIndirectCommand) + (vbo->z * vbo->c);
 }
 
-void dynamic_vbo_write(DynamicVbo* vbo, const usize i) {
+bool dynamic_vbo_write(DynamicVbo* vbo, const usize i) {
     // Get the mapped data.
-    const usize frame_size = sizeof(VkDrawIndirectCommand) + (vbo->size * vbo->capacity);
-    const usize offset = frame_size * i;
-    const usize vertex_bytes = vbo->size * vbo->length;
-    const usize data_size = sizeof(VkDrawIndirectCommand) + vertex_bytes;
-    u8* head = NULL;
-    if (!query_vk_result(vkMapMemory(vbo->device, vbo->memory, offset, data_size, 0, (void**)&head))) {
-        return;
+    const usize offset = dynamic_vbo_frame_size(vbo) * i;
+    const usize vertex_data_bytes = vbo->z * vbo->n;
+    const usize data_size = sizeof(VkDrawIndirectCommand) + vertex_data_bytes;
+    void* data = NULL;
+    if (!query_vk_result(vkMapMemory(vbo->buffer.device, vbo->buffer.memory, offset, data_size, 0, &data))) {
+        return false;
     }
 
     // Write command and vertex data.
+    u8* head = (u8*)data;
     VkDrawIndirectCommand* command = (VkDrawIndirectCommand*)head;
     *command = (VkDrawIndirectCommand){
-        .vertexCount = vbo->length,
+        .vertexCount = vbo->n,
         .instanceCount = 1,
         .firstVertex = 0,
         .firstInstance = 0,
     };
-    void* data = (void*)(head + sizeof(VkDrawIndirectCommand));
-    memcpy(data, vbo->data, vertex_bytes);
+    memcpy(head + sizeof(VkDrawIndirectCommand), vbo->data, vertex_data_bytes);
     
-    vkUnmapMemory(vbo->device, vbo->memory);
+    // Unmap.
+    vkUnmapMemory(vbo->buffer.device, vbo->buffer.memory);
+
+    return true;
 }
 
-void clear_dynamic_vbo(DynamicVbo* vbo) {
-    vbo->length = 0;
-}
-
-void push_to_dynamic_vbo(DynamicVbo* vbo, const usize n, const void* p) {
-    void* dst = (void*)(vbo->data + (vbo->length * vbo->size));
-    const usize data_size = n * vbo->size;
+void dynamic_vbo_push(DynamicVbo* vbo, const usize n, const void* p) {
+    void* dst = (void*)(vbo->data + (vbo->n * vbo->z));
+    const usize data_size = n * vbo->z;
     memcpy(dst, p, data_size);
-    vbo->length += n;
+    vbo->n += n;
 }

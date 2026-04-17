@@ -1,5 +1,6 @@
 #include "gpu_allocator.h"
 
+#include "buffer.h"
 #include "error.h"
 #include <vulkan/vulkan_core.h>
 
@@ -21,22 +22,10 @@ static const BufferAllocation NULL_BUFFER_ALLOCATION = {
 };
 
 /// Returns a matching memory type index for the flags.
-///
-/// @param allocator The GPU allocator.
-/// @param filter The memory type bit filter.
-/// @param properties The required memory properties.
-/// @param memory_type_index Output memory type index.
-/// @return Whether a matching memory type index was found.
 static bool find_memory_type_index(const GpuAllocator* allocator, u32 filter,
                                    VkMemoryPropertyFlags properties, u32* memory_type_index);
 
 /// Creates and allocates a Vulkan buffer.
-///
-/// @param allocator The GPU allocator.
-/// @param size The target buffer size in bytes.
-/// @param usage_flags Vulkan usage flags for the buffer.
-/// @param memory_flags Vulkan memory property flags for the allocation.
-/// @return A buffer allocation, or `NULL_BUFFER_ALLOCATION` on failure.
 static BufferAllocation allocate_buffer(const GpuAllocator* allocator, usize size,
                                         VkBufferUsageFlags usage_flags,
                                         VkMemoryPropertyFlags memory_flags);
@@ -51,19 +40,36 @@ GpuAllocator create_gpu_allocator(const Context* context) {
     return allocator;
 }
 
-DynamicVbo* allocate_dynamic_vbo(const GpuAllocator* allocator, usize num_frames, usize z, usize n) {
-    const usize frame_size = (z * n) + sizeof(VkDrawIndirectCommand);
-    const usize size = frame_size * num_frames;
+DynamicVbo* allocate_dynamic_vbo(
+    const GpuAllocator* allocator,
+    const Renderer* renderer,
+    const usize z,
+    const usize c
+) {
+    // Create buffer and memory allocation.
+    const usize frame_size = (z * c) + sizeof(VkDrawIndirectCommand);
+    const usize size = frame_size * renderer->swapchain.num_images;
     BufferAllocation allocation = allocate_buffer(
-        allocator, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    VkBuffer buffer = allocation.buffer;
-    VkDeviceMemory memory = allocation.memory;
-    if (buffer == VK_NULL_HANDLE || memory == VK_NULL_HANDLE) {
+        allocator,
+        size,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+    if (allocation.buffer == VK_NULL_HANDLE || allocation.memory == VK_NULL_HANDLE) {
         goto FAIL;
     }
 
-    DynamicVbo* vbo = create_dynamic_vbo(allocator->device, buffer, memory, num_frames, z, n);
+    // Create the dynamic VBO.
+    Buffer buffer = {
+        .device = allocator->device,
+        .buffer = allocation.buffer,
+        .memory = allocation.memory
+    };
+    DynamicVbo* vbo = create_dynamic_vbo(
+        &buffer,
+        z,
+        c
+    );
     if (vbo == NULL) {
         goto FAIL;
     }
@@ -72,10 +78,12 @@ DynamicVbo* allocate_dynamic_vbo(const GpuAllocator* allocator, usize num_frames
 
     // Failure jump; cleans and returns a null dynamic VBO.
 FAIL:
-    vkDestroyBuffer(allocator->device, buffer, NULL);
-    vkFreeMemory(allocator->device, memory, NULL);
+    vkDestroyBuffer(allocator->device, allocation.buffer, NULL);
+    vkFreeMemory(allocator->device, allocation.memory, NULL);
     return NULL;
 }
+
+Ubo* allocate_ubo(const GpuAllocator allocator, const Renderer* renderer, usize z);
 
 bool find_memory_type_index(const GpuAllocator* allocator, u32 filter, VkMemoryPropertyFlags properties,
                             u32* memory_type_index) {
