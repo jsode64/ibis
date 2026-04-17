@@ -12,59 +12,35 @@
 #define TIMEOUT_NANOS 2000000000
 
 /// Returns whether the given `VkResult` is caused by an outdated swapchain.
-///
-/// @param result The `VkResult` to check.
-/// @return Whether the result is caused by an outdated swapchain.
 static bool is_vk_error_outdated_swapchain(VkResult result);
 
 /// Creates a render pass for the window surface format.
-///
-/// @param device The logical device.
-/// @param format The window surface format.
-/// @return A new render pass, or `VK_NULL_HANDLE` on failure.
 static VkRenderPass create_render_pass(const VkDevice device, VkFormat format);
 
+/// Creates a descriptor pool.
+static VkDescriptorPool create_descriptor_pool(const VkDevice device, usize max_sets);
+
 /// Creates a command pool.
-///
-/// @param device The logical device.
-/// @param queue_family_index The queue family index to target.
-/// @return A new command pool, or `VK_NULL_HANDLE` on failure.
 static VkCommandPool create_command_pool(const VkDevice device, u32 queue_family_index);
 
 /// Creates N frames in an array.
-///
-/// @param device The logical device.
-/// @param n The number of frames to create.
-/// @return An array of N frames, or a null pointer on failure.
 static Frame* create_frames(const VkDevice device, usize n);
 
 /// Creates N command buffers in an array.
-///
-/// @param device The logical device.
-/// @param command_pool The command pool.
-/// @param n The number of command buffers to allocate.
-/// @return An array of command buffers, or a null pointer on failure.
-static VkCommandBuffer* create_command_buffers(const VkDevice device,
-                                               const VkCommandPool command_pool, usize n);
+static VkCommandBuffer* create_command_buffers(
+    const VkDevice device, const VkCommandPool command_pool, usize n);
 
 /// Destroys the frame array.
-/// This also frees the passed pointer.
-///
-/// @param frames The frames to destroy.
-/// @param device The logical device.
-/// @param n The number of frames in the array.
 static void destroy_frames(Frame* frames, const VkDevice device, usize n);
 
-#define N_FRAMES 3
-
-Renderer create_renderer(const Context* context, const Window* window) {
-    Renderer renderer = NULL_RENDERER;
+Renderer create_renderer(const RendererBuilder* builder, const Context* context) {
+    Renderer renderer = {};
     renderer.context = context;
-    renderer.num_frames = N_FRAMES;
+    renderer.num_frames = builder->num_frames;
     renderer.frame_index = 0;
 
     const SwapchainInfo swapchain_info =
-        get_swapchain_info(context->physical_device, context->surface, window);
+        get_swapchain_info(context->physical_device, context->surface, context->window);
 
     renderer.render_pass =
         create_render_pass(context->device, swapchain_info.surface_format.format);
@@ -72,9 +48,15 @@ Renderer create_renderer(const Context* context, const Window* window) {
         goto FAIL;
     }
 
-    renderer.swapchain =
-        create_swapchain(context, renderer.render_pass, &swapchain_info, VK_NULL_HANDLE);
+    renderer.swapchain = create_swapchain(
+        context, renderer.render_pass, &swapchain_info, VK_NULL_HANDLE, builder->num_images);
     if (renderer.swapchain.swapchain == VK_NULL_HANDLE) {
+        goto FAIL;
+    }
+
+    renderer.descriptor_pool =
+        create_descriptor_pool(context->device, builder->max_num_uniform_buffers);
+    if (renderer.descriptor_pool == VK_NULL_HANDLE) {
         goto FAIL;
     }
 
@@ -89,8 +71,8 @@ Renderer create_renderer(const Context* context, const Window* window) {
     }
 
     renderer.num_command_buffers = renderer.swapchain.num_images;
-    renderer.command_buffers = create_command_buffers(context->device, renderer.command_pool,
-                                                      renderer.num_command_buffers);
+    renderer.command_buffers = create_command_buffers(
+        context->device, renderer.command_pool, renderer.num_command_buffers);
     if (renderer.command_buffers == NULL) {
         goto FAIL;
     }
@@ -102,7 +84,7 @@ Renderer create_renderer(const Context* context, const Window* window) {
     // Failure jump; cleans and returns a null renderer.
 FAIL:
     destroy_renderer(&renderer);
-    return NULL_RENDERER;
+    return (Renderer){};
 }
 
 void destroy_renderer(Renderer* renderer) {
@@ -117,14 +99,15 @@ void destroy_renderer(Renderer* renderer) {
     }
 
     destroy_frames(renderer->frames, renderer->context->device, renderer->num_frames);
+    free(renderer->frames);
     vkDestroyCommandPool(renderer->context->device, renderer->command_pool, NULL);
 
-    destroy_swapchain(&renderer->swapchain, renderer->context->device);
-    if (renderer->render_pass != VK_NULL_HANDLE) {
-        vkDestroyRenderPass(renderer->context->device, renderer->render_pass, NULL);
-    }
+    vkDestroyDescriptorPool(renderer->context->device, renderer->descriptor_pool, NULL);
 
-    *renderer = NULL_RENDERER;
+    destroy_swapchain(&renderer->swapchain, renderer->context->device);
+    vkDestroyRenderPass(renderer->context->device, renderer->render_pass, NULL);
+
+    *renderer = (Renderer){};
 }
 
 u64* renderer_commands_flush(Renderer* renderer, const usize n) {
@@ -150,8 +133,9 @@ RenderBeginInfo renderer_begin(Renderer* renderer) {
     const usize frame_index = renderer->frame_index;
     const Frame* frame = &renderer->frames[frame_index];
     renderer->frame_index = (renderer->frame_index + 1) % renderer->num_frames;
-    if (!query_vk_result(vkWaitForFences(renderer->context->device, 1, &frame->in_flight, VK_TRUE, 2000000000))) {
-        return NULL_RENDER_BEGIN_INFO;
+    if (!query_vk_result(vkWaitForFences(
+            renderer->context->device, 1, &frame->in_flight, VK_TRUE, 2000000000))) {
+        return (RenderBeginInfo){};
     }
 
     // Acquire the next swapchain image index.
@@ -165,11 +149,8 @@ RenderBeginInfo renderer_begin(Renderer* renderer) {
         .fence = VK_NULL_HANDLE,
         .deviceMask = 1,
     };
-    VkResult acquire_image_result = vkAcquireNextImage2KHR(
-        renderer->context->device,
-        &acquire_info,
-        &image_index
-    );
+    VkResult acquire_image_result =
+        vkAcquireNextImage2KHR(renderer->context->device, &acquire_info, &image_index);
 
     return (RenderBeginInfo){
         .frame_index = frame_index,
@@ -220,11 +201,14 @@ bool renderer_draw(Renderer* renderer, const RenderBeginInfo* begin_info) {
         .pImageIndices = &image_index,
         .pResults = NULL,
     };
-    const VkResult present_result = vkQueuePresentKHR(renderer->context->present_queue, &present_info);
+    const VkResult present_result =
+        vkQueuePresentKHR(renderer->context->present_queue, &present_info);
 
     // Recreate swapchain if outdated.
     if (is_vk_error_outdated_swapchain(present_result)) {
         return renderer_recreate_swapchain(renderer);
+    } else if (!query_vk_result(present_result)) {
+        return false;
     }
 
     return true;
@@ -308,8 +292,11 @@ bool renderer_recreate_swapchain(Renderer* renderer) {
 
     SwapchainInfo swapchain_info = get_swapchain_info(
         renderer->context->physical_device, renderer->context->surface, renderer->context->window);
-    Swapchain new_swapchain = create_swapchain(renderer->context, renderer->render_pass,
-                                               &swapchain_info, renderer->swapchain.swapchain);
+    Swapchain new_swapchain = create_swapchain(renderer->context,
+        renderer->render_pass,
+        &swapchain_info,
+        renderer->swapchain.swapchain,
+        renderer->swapchain.num_images);
     if (new_swapchain.swapchain == VK_NULL_HANDLE) {
         return false;
     }
@@ -383,6 +370,28 @@ VkRenderPass create_render_pass(const VkDevice device, const VkFormat format) {
     }
 }
 
+VkDescriptorPool create_descriptor_pool(const VkDevice device, const usize max_sets) {
+    const VkDescriptorPoolSize pool_sizes[] = {(VkDescriptorPoolSize){
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        .descriptorCount = max_sets,
+    }};
+    const VkDescriptorPoolCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .maxSets = max_sets,
+        .poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
+        .pPoolSizes = pool_sizes,
+    };
+
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    if (query_vk_result(vkCreateDescriptorPool(device, &create_info, NULL, &descriptor_pool))) {
+        return descriptor_pool;
+    } else {
+        return VK_NULL_HANDLE;
+    }
+}
+
 VkCommandPool create_command_pool(const VkDevice device, const u32 queue_family_index) {
     const VkCommandPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -446,8 +455,8 @@ FAIL:
     return NULL;
 }
 
-VkCommandBuffer* create_command_buffers(const VkDevice device, const VkCommandPool command_pool,
-                                        const usize n) {
+VkCommandBuffer* create_command_buffers(
+    const VkDevice device, const VkCommandPool command_pool, const usize n) {
     const VkCommandBufferAllocateInfo allocate_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = NULL,
@@ -474,6 +483,5 @@ void destroy_frames(Frame* frames, const VkDevice device, const usize n) {
             vkDestroySemaphore(device, frames[i].render_finished, NULL);
             vkDestroySemaphore(device, frames[i].image_available, NULL);
         }
-        free(frames);
     }
 }

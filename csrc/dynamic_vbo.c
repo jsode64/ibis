@@ -1,10 +1,10 @@
 #include "dynamic_vbo.h"
+#include "error.h"
+#include "util.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
-#include "error.h"
-#include "util.h"
 
 DynamicVbo* create_dynamic_vbo(Buffer* buffer, const usize z, const usize c) {
     const usize data_size = z * c;
@@ -30,9 +30,7 @@ void destroy_dynamic_vbo(DynamicVbo* vbo) {
     free(vbo);
 }
 
-u8* dynamic_vbo_get_data(DynamicVbo* vbo) {
-    return vbo->data;
-}
+u8* dynamic_vbo_get_data(DynamicVbo* vbo) { return vbo->data; }
 
 usize dynamic_vbo_frame_size(const DynamicVbo* vbo) {
     return sizeof(VkDrawIndirectCommand) + (vbo->z * vbo->c);
@@ -44,7 +42,8 @@ bool dynamic_vbo_write(DynamicVbo* vbo, const usize i) {
     const usize vertex_data_bytes = vbo->z * vbo->n;
     const usize data_size = sizeof(VkDrawIndirectCommand) + vertex_data_bytes;
     void* data = NULL;
-    if (!query_vk_result(vkMapMemory(vbo->buffer.device, vbo->buffer.memory, offset, data_size, 0, &data))) {
+    if (!query_vk_result(
+            vkMapMemory(vbo->buffer.device, vbo->buffer.memory, offset, data_size, 0, &data))) {
         return false;
     }
 
@@ -58,7 +57,7 @@ bool dynamic_vbo_write(DynamicVbo* vbo, const usize i) {
         .firstInstance = 0,
     };
     memcpy(head + sizeof(VkDrawIndirectCommand), vbo->data, vertex_data_bytes);
-    
+
     // Unmap.
     vkUnmapMemory(vbo->buffer.device, vbo->buffer.memory);
 

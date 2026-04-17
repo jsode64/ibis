@@ -5,8 +5,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                 const Window* window) {
+SwapchainInfo
+get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR surface, const Window* window) {
     VkSurfaceCapabilitiesKHR capabilities = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &capabilities);
 
@@ -14,10 +14,12 @@ SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR 
     const bool extent_size_defined = capabilities.currentExtent.width != 0xFFFFFFFFu;
     const VkExtent2D extent = {
         .width = extent_size_defined ? capabilities.currentExtent.width
-                                     : CLAMP(window->width, capabilities.minImageExtent.width,
+                                     : CLAMP(window->width,
+                                             capabilities.minImageExtent.width,
                                              capabilities.maxImageExtent.width),
         .height = extent_size_defined ? capabilities.currentExtent.height
-                                      : CLAMP(window->height, capabilities.minImageExtent.height,
+                                      : CLAMP(window->height,
+                                              capabilities.minImageExtent.height,
                                               capabilities.maxImageExtent.height),
     };
 
@@ -25,8 +27,8 @@ SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR 
     u32 num_surface_formats = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_surface_formats, NULL);
     VkSurfaceFormatKHR* surface_formats = malloc(num_surface_formats * sizeof(VkSurfaceFormatKHR));
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &num_surface_formats,
-                                         surface_formats);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        physical_device, surface, &num_surface_formats, surface_formats);
     VkSurfaceFormatKHR surface_format = surface_formats[0];
     for (u32 i = 0; i < num_surface_formats; i++) {
         if (surface_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
@@ -41,8 +43,8 @@ SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR 
     u32 num_present_modes = 0;
     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &num_present_modes, NULL);
     VkPresentModeKHR* present_modes = malloc(num_present_modes * sizeof(VkPresentModeKHR));
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &num_present_modes,
-                                              present_modes);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        physical_device, surface, &num_present_modes, present_modes);
     VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
     for (u32 i = 0; i < num_present_modes; i++) {
         if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -60,16 +62,21 @@ SwapchainInfo get_swapchain_info(VkPhysicalDevice physical_device, VkSurfaceKHR 
     };
 }
 
-Swapchain create_swapchain(const Context* context, VkRenderPass render_pass,
-                           const SwapchainInfo* swapchain_info, const VkSwapchainKHR previous) {
+Swapchain create_swapchain(const Context* context,
+                           const VkRenderPass render_pass,
+                           const SwapchainInfo* swapchain_info,
+                           const VkSwapchainKHR previous,
+                           const usize ideal_num_images) {
     Swapchain swapchain = NULL_SWAPCHAIN;
     VkImage* images = NULL;
 
-    const u32 min_images = swapchain_info->capabilities.maxImageCount == 0
-                               ? swapchain_info->capabilities.minImageCount + 1
-                               : CLAMP(swapchain_info->capabilities.minImageCount + 1,
-                                       swapchain_info->capabilities.minImageCount,
-                                       swapchain_info->capabilities.maxImageCount);
+    // Get the number of images.
+    const u32 max_num_images = swapchain_info->capabilities.maxImageCount == 0
+                                   ? UINT32_MAX
+                                   : swapchain_info->capabilities.maxImageCount;
+    const u32 num_images =
+        CLAMP(ideal_num_images, swapchain_info->capabilities.minImageCount + 1, max_num_images);
+
     const u32 queue_family_indices[] = {
         context->graphics_queue_index,
         context->present_queue_index,
@@ -82,7 +89,7 @@ Swapchain create_swapchain(const Context* context, VkRenderPass render_pass,
         .pNext = NULL,
         .flags = 0,
         .surface = context->surface,
-        .minImageCount = min_images,
+        .minImageCount = num_images,
         .imageFormat = swapchain_info->surface_format.format,
         .imageColorSpace = swapchain_info->surface_format.colorSpace,
         .imageExtent = swapchain_info->extent,
@@ -152,8 +159,8 @@ Swapchain create_swapchain(const Context* context, VkRenderPass render_pass,
             .layers = 1,
         };
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
-        if (!query_vk_result(vkCreateFramebuffer(context->device, &framebuffer_create_info, NULL,
-                                                 &framebuffer))) {
+        if (!query_vk_result(vkCreateFramebuffer(
+                context->device, &framebuffer_create_info, NULL, &framebuffer))) {
             goto FAIL;
         }
 

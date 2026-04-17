@@ -18,8 +18,8 @@ ShaderLayout create_shader_layout(const ShaderLayoutBuilder* builder, const Rend
     };
 
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
-    if (query_vk_result(vkCreatePipelineLayout(renderer->context->device, &create_info, NULL,
-                                               &pipeline_layout))) {
+    if (query_vk_result(vkCreatePipelineLayout(
+            renderer->context->device, &create_info, NULL, &pipeline_layout))) {
         return (ShaderLayout){
             .device = renderer->context->device,
             .pipeline_layout = pipeline_layout,
@@ -34,8 +34,8 @@ void destroy_shader_layout(ShaderLayout* layout) {
     vkDestroyPipelineLayout(layout->device, layout->pipeline_layout, NULL);
 }
 
-Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout,
-                     const Renderer* renderer) {
+Shader
+create_shader(const ShaderBuilder* builder, const ShaderLayout* layout, const Renderer* renderer) {
     VkShaderModule vertex_module = VK_NULL_HANDLE;
     VkShaderModule fragment_module = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
@@ -47,8 +47,8 @@ Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout,
         .codeSize = builder->vertex_length,
         .pCode = builder->vertex_code,
     };
-    if (!query_vk_result(vkCreateShaderModule(renderer->context->device, &vertex_module_info, NULL,
-                                              &vertex_module))) {
+    if (!query_vk_result(vkCreateShaderModule(
+            renderer->context->device, &vertex_module_info, NULL, &vertex_module))) {
         goto FAIL;
     }
 
@@ -59,8 +59,8 @@ Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout,
         .codeSize = builder->fragment_length,
         .pCode = builder->fragment_code,
     };
-    if (!query_vk_result(vkCreateShaderModule(renderer->context->device, &fragment_module_info,
-                                              NULL, &fragment_module))) {
+    if (!query_vk_result(vkCreateShaderModule(
+            renderer->context->device, &fragment_module_info, NULL, &fragment_module))) {
         goto FAIL;
     }
 
@@ -189,8 +189,8 @@ Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout,
         .basePipelineIndex = -1,
     };
 
-    if (!query_vk_result(vkCreateGraphicsPipelines(renderer->context->device, VK_NULL_HANDLE, 1,
-                                                   &pipeline_info, NULL, &pipeline))) {
+    if (!query_vk_result(vkCreateGraphicsPipelines(
+            renderer->context->device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline))) {
         goto FAIL;
     }
 

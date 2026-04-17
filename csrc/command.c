@@ -1,13 +1,11 @@
 #include "command.h"
-#include <vulkan/vulkan_core.h>
 #include "dynamic_vbo.h"
+#include <vulkan/vulkan_core.h>
 
-bool fill_command_buffer(
-    VkCommandBuffer const command_buffer,
-    const usize i,
-    const usize n,
-    const u64* data
-) {
+bool fill_command_buffer(VkCommandBuffer const command_buffer,
+                         const usize i,
+                         const usize n,
+                         const u64* data) {
     const u64* next = data;
     while (data + n > next) {
         if (*data == CMD_DRAW) {

@@ -7,6 +7,19 @@
 #include "swapchain.h"
 #include "window.h"
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
+
+/// A builder for a renderer.
+typedef struct RendererBuilder {
+    /// The number of frames in flight.
+    usize num_frames;
+
+    /// The ideal number of swapchain images.
+    usize num_images;
+
+    /// The maximum number of uniform buffers that will be made.
+    usize max_num_uniform_buffers;
+} RendererBuilder;
 
 /// Per-frame synchronization objects.
 typedef struct Frame {
@@ -22,10 +35,16 @@ typedef struct Renderer {
     /// The source context. Must outlive the renderer.
     const Context* context;
 
+    /// The render pass.
     VkRenderPass render_pass;
 
+    /// The swapchain object.
     Swapchain swapchain;
 
+    /// The descriptor pool.
+    VkDescriptorPool descriptor_pool;
+
+    /// The command pool.
     VkCommandPool command_pool;
 
     /// The number of frames in flight.
@@ -64,33 +83,8 @@ typedef struct RenderBeginInfo {
     bool is_valid;
 } RenderBeginInfo;
 
-static const Renderer NULL_RENDERER = {
-    .context = NULL,
-    .render_pass = VK_NULL_HANDLE,
-    .swapchain = NULL_SWAPCHAIN,
-    .command_pool = VK_NULL_HANDLE,
-    .num_frames = 0,
-    .frame_index = 0,
-    .num_command_buffers = 0,
-    .command_buffers = NULL,
-    .num_commands = 0,
-    .commands = NULL,
-    .frames = NULL,
-};
-
-static const RenderBeginInfo NULL_RENDER_BEGIN_INFO = {
-    .frame_index = 0,
-    .image_index = 0,
-    .is_swapchain_outdated = false,
-    .is_valid = false,
-};
-
-/// Creates a renderer for the context and render target.
-///
-/// @param context The source context. This must outlive the renderer.
-/// @param window The render target.
-/// @return A new renderer. On failure, it will contain only null handles.
-Renderer create_renderer(const Context* context, const Window* window);
+/// Creates a renderer for the given context.
+Renderer create_renderer(const RendererBuilder* builder, const Context* context);
 
 /// Destroys the renderer.
 ///
@@ -99,33 +93,16 @@ void destroy_renderer(Renderer* renderer);
 
 /// Frees all previous commands and reallocates N for refilling.
 /// If N is zero, no reallocation will happen and no commands will be stored.
-///
-/// @param renderer The renderer.
-/// @param n The number of words to allocate.
-/// @return A pointer to the new data for filling, or a null pointer on failure.
 u64* renderer_commands_flush(Renderer* renderer, usize n);
 
 /// Gets information for the next render.
-///
-/// @param renderer The renderer to begin.
-/// @return Information for the next render.
 RenderBeginInfo renderer_begin(Renderer* renderer);
 
 /// Queues drawing and presentation for the renderer.
-///
-/// @param renderer The renderer.
-/// @param begin_info The previous `begin_renderer` return value.
-/// @return `true` on success, `false` on failure.
 bool renderer_draw(Renderer* renderer, const RenderBeginInfo* begin_info);
 
 /// Recreates the renderer's swapchain.
-///
-/// @param renderer The renderer.
-/// @result Whether the operation was successful.
 bool renderer_recreate_swapchain(Renderer* renderer);
 
 /// Reloads the command buffers.
-///
-/// @param renderer The renderer.
-/// @return `true` on success, `false` on failure.
 bool renderer_reload_commands(Renderer* renderer);

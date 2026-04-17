@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_core.h>
 #include "buffer.h"
 #include "def.h"
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 /// A dynamically updated vertex buffer.
 typedef struct DynamicVbo {
@@ -24,7 +24,7 @@ typedef struct DynamicVbo {
 } DynamicVbo;
 
 /// Creates a new dynamic VBO with the given buffer, vertex size, and capacity.
-DynamicVbo* create_dynamic_vbo(Buffer* buffer, usize z,usize c);
+DynamicVbo* create_dynamic_vbo(Buffer* buffer, usize z, usize c);
 
 /// Destroys the dynamic VBO.
 void destroy_dynamic_vbo(DynamicVbo* vbo);

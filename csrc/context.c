@@ -86,7 +86,8 @@ static bool is_debugging_supported();
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
                VkDebugUtilsMessageTypeFlagsEXT message_type,
-               const VkDebugUtilsMessengerCallbackDataEXT* data, void*);
+               const VkDebugUtilsMessengerCallbackDataEXT* data,
+               void*);
 
 /// Creates a surface from the instance and window.
 ///
@@ -332,7 +333,8 @@ bool is_debugging_supported() {
 VKAPI_ATTR VkBool32 VKAPI_CALL
 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT _message_severity,
                VkDebugUtilsMessageTypeFlagsEXT _message_type,
-               const VkDebugUtilsMessengerCallbackDataEXT* data, void* _user_data) {
+               const VkDebugUtilsMessengerCallbackDataEXT* data,
+               void* _user_data) {
     (void)_message_severity;
     (void)_message_type;
     (void)_user_data;

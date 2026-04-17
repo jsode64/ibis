@@ -71,8 +71,8 @@ void destroy_shader_layout(ShaderLayout* layout);
 /// @param layout The shader layout.
 /// @param renderer The target renderer.
 /// @return A shader, or a null shader on failure.
-Shader create_shader(const ShaderBuilder* builder, const ShaderLayout* layout,
-                     const Renderer* renderer);
+Shader
+create_shader(const ShaderBuilder* builder, const ShaderLayout* layout, const Renderer* renderer);
 
 /// Destroys the shader.
 void destroy_shader(Shader* shader);

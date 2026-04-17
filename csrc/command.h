@@ -19,9 +19,4 @@ typedef enum Command {
 /// @param n The number of words in the encoded commands.
 /// @param data A pointer to the encoded commands.
 /// @return `true` on success, `false` on failure.
-bool fill_command_buffer(
-    VkCommandBuffer command_buffer,
-    usize i,
-    usize n,
-    const u64* data
-);
+bool fill_command_buffer(VkCommandBuffer command_buffer, usize i, usize n, const u64* data);

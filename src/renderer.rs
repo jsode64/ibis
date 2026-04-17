@@ -1,14 +1,13 @@
 use std::{ptr, slice};
 
 use crate::{
-    Context, DynamicVbo, DynamicVboRaw, Result, Shader, VertexData, VkHandle, Window,
-    error::vk_error,
+    Context, DynamicVbo, DynamicVboRaw, Result, Shader, VertexData, VkHandle, error::vk_error,
 };
 
 unsafe extern "C" {
     /// Creates a renderer for the given context and render target.
     #[must_use]
-    fn create_renderer(context: *const Context, window: *const Window) -> Renderer;
+    fn create_renderer(builder: *const RendererBuilder, context: *const Context) -> Renderer;
 
     /// Destroys the renderer.
     fn destroy_renderer(renderer: *mut Renderer);
@@ -81,6 +80,19 @@ struct SwapchainImage {
     _framebuffer: VkHandle,
 }
 
+/// A builder for a renderer.
+#[repr(C)]
+pub struct RendererBuilder {
+    /// The number of frames in flight to use.
+    num_frames: usize,
+
+    /// The ideal number of swapchain images.
+    num_images: usize,
+
+    /// The maximum number of uniform buffers to be created.
+    max_num_uniform_buffers: usize,
+}
+
 /// Per-frame objects. Contains the frame's synchronization objects and command buffer.
 #[repr(C)]
 struct Frame {
@@ -104,6 +116,9 @@ pub struct Renderer {
 
     /// The swapchain.
     swapchain: Swapchain,
+
+    /// The descriptor pool.
+    descriptor_pool: VkHandle,
 
     /// The command pool.
     command_pool: VkHandle,
@@ -146,11 +161,55 @@ pub struct RenderBeginInfo {
     is_valid: bool,
 }
 
-impl Renderer {
-    /// Creates a renderer for the context and window target.
+impl RendererBuilder {
+    /// Builds the renderer.
+    #[inline]
     #[must_use]
-    pub fn new(context: &Context, window: &Window) -> Result<Self> {
-        let renderer = unsafe { create_renderer(ptr::from_ref(context), ptr::from_ref(window)) };
+    pub fn build(self, context: &Context) -> Result<Renderer> {
+        Renderer::new(self, context)
+    }
+
+    /// Sets the number of frames in flight.
+    #[inline]
+    #[must_use]
+    pub const fn num_frames(mut self, n: usize) -> Self {
+        self.num_frames = n;
+        self
+    }
+
+    /// Sets the ideal number of swapchain images.
+    #[inline]
+    #[must_use]
+    pub const fn num_images(mut self, n: usize) -> Self {
+        self.num_images = n;
+        self
+    }
+
+    /// Sets the maximum number of uniform buffers that can be created.
+    #[inline]
+    #[must_use]
+    pub const fn max_num_uniform_buffers(mut self, n: usize) -> Self {
+        self.max_num_uniform_buffers = n;
+        self
+    }
+}
+
+impl Renderer {
+    /// Returns a default renderer builder.
+    #[inline]
+    #[must_use]
+    pub fn builder() -> RendererBuilder {
+        RendererBuilder {
+            num_frames: 2,
+            num_images: 3,
+            max_num_uniform_buffers: 0,
+        }
+    }
+
+    /// Creates a renderer for the given context.
+    #[must_use]
+    pub(crate) fn new(builder: RendererBuilder, context: &Context) -> Result<Self> {
+        let renderer = unsafe { create_renderer(ptr::from_ref(&builder), ptr::from_ref(context)) };
 
         let is_initialized = !renderer.context.is_null();
 
